@@ -1,41 +1,52 @@
-class MessagesData:
-
-    MESSAGE_CREATE_COURIER_WITH_EXIST_LOGIN = 'Этот логин уже используется. Попробуйте другой.'
-    MESSAGE_CREATE_COURIER_WITHOUT_REQUIRED_FIELD = 'Недостаточно данных для создания учетной записи'
-    MESSAGE_LOG_IN_COURIER_WITHOUT_REQUIRED_FIELD = 'Недостаточно данных для входа'
-    MESSAGE_LOG_IN_COURIER_WITH_WRONG_FIELD = 'Учетная запись не найдена'
-
-
-class CourierData:
-
-    empty_log_in_data = {
-        'login': '',
-        'password': ''
-    }
-
-    wrong_log_in_data = {
-        'login': 'wrong@login',
-        'password': 'Wrong_pass123!'
-    }
+import pytest
+import requests
+import allure
+from urls import Urls
+from endpoints import Endpoints
+from data import MessagesData, CourierData
 
 
-class OrderData:
+class TestLoginCourier:
 
-    order_data = {
-        'firstName': 'Test',
-        'lastName': 'Testov',
-        'address': 'Moscow, Pushkina, 17',
-        'metroStation': 7,
-        'phone': '+7(905)193 17 71',
-        'rentTime': 3,
-        'deliveryDate': '2024-05-05',
-        'comment': 'test_comment 123!',
-        'color': []
-    }
+    url = f'{Urls.MAIN_URL}{Endpoints.LOGIN_COURIER_EP}'
 
-    order_list_data = {
-        'courierId': None,
-        'nearestStation': '["1"]',
-        'limit': 10,
-        'page': 1
-    }
+    @allure.title('Успешная авторизация курьера')
+    def test_log_in_courier_success(self, new_courier):
+        with allure.step('Отправка запроса на авторизацию курьера'):
+            response = requests.post(self.url, data=new_courier)
+
+        assert (response.status_code == 200 and 'id' in response.json())
+
+
+    @allure.title('Невозможность авторизоваться курьером без обязательного поля')
+    @pytest.mark.parametrize('key, empty_field',
+                             [
+                                 ['login', CourierData.empty_log_in_data['login']],
+                                 ['password', CourierData.empty_log_in_data['password']]
+                             ],
+                             ids=['without_login', 'without_password'])
+    def test_log_in_courier_without_required_field_failure(self, key, empty_field, new_courier):
+        payload = dict(login=new_courier['login'], password=new_courier['password'])
+        payload[key] = empty_field
+        with allure.step('Отправка запроса на авторизацию курьера с некорректными данными'):
+            response = requests.post(self.url, data=payload)
+
+        assert (response.status_code == 400
+                and response.json()['message'] == MessagesData.MESSAGE_LOG_IN_COURIER_WITHOUT_REQUIRED_FIELD)
+
+
+    @allure.title('Невозможность авторизоваться курьером с некорректным значением поля')
+    @pytest.mark.parametrize('key, wrong_field',
+                             [
+                                 ['login', CourierData.wrong_log_in_data['login']],
+                                 ['password', CourierData.wrong_log_in_data['password']]
+                             ],
+                             ids=['wrong_login', 'wrong_password'])
+    def test_log_in_courier_with_wrong_field_failure(self, key, wrong_field, new_courier):
+        payload = dict(login=new_courier['login'], password=new_courier['password'])
+        payload[key] = wrong_field
+        with allure.step('Отправка запроса на авторизацию курьера с некорректными данными'):
+            response = requests.post(self.url, data=payload)
+
+        assert (response.status_code == 404
+                and response.json()['message'] == MessagesData.MESSAGE_LOG_IN_COURIER_WITH_WRONG_FIELD)
